@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>CampusConnect</title>
+<style>
+:root{--bg:#f7f3ff;--card:#fff;--ink:#1d1236;--mute:#6b6285;--p:#4a1f8f;--pk:#ff3d85;--line:#e6dcf7}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1226;--card:#1a1f38;--ink:#f1ecff;--mute:#a49cc2;--line:#2c3252}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+.w{max-width:520px;margin:auto;padding:16px 16px 90px}
+h1,h2{margin:0 0 8px}.m{color:var(--mute);font-size:14px}
+.card,.i{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px;margin-bottom:12px}
+input,select,textarea{width:100%;padding:11px;border-radius:12px;border:1px solid var(--line);background:var(--card);margin:4px 0 10px}
+label{font-size:13px;font-weight:600}
+.b{border:0;border-radius:99px;padding:11px 20px;font-weight:600;cursor:pointer;background:var(--card);border:1px solid var(--line)}
+.b.p{background:linear-gradient(135deg,var(--p),var(--pk));color:#fff;border:0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chip{display:inline-flex;gap:4px;padding:4px 10px;border:1px solid var(--line);border-radius:99px;margin:0 6px 6px 0;font-size:14px}.chip input{width:auto;margin:0}
+.pc{height:55vh;max-height:480px;border-radius:26px;background:linear-gradient(160deg,var(--p),var(--pk)) center/cover;display:flex;align-items:flex-end;color:#fff;overflow:hidden}
+.pc div{width:100%;padding:50px 18px 18px;background:linear-gradient(transparent,#000a)}
+.acts{display:flex;justify-content:center;gap:14px;margin:14px 0}.acts .b{width:60px;height:60px;padding:0;font-size:24px}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;background:none;padding:10px 0;color:var(--mute);font-size:12px}nav .on{color:var(--pk);font-weight:700}
+.msg{max-width:78%;padding:8px 13px;border-radius:16px;background:var(--card);border:1px solid var(--line);margin:6px 0}
+.msg.me{margin-left:auto;background:var(--p);color:#fff}
+.t{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:99px;z-index:9;max-width:90%}
+</style></head><body><div class="w" id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const sb=supabase.createClient("https://uuhnuwvsyhbdnqebzlmf.supabase.co","sb_publishable_J3f_2pA6-mzgx2s_5ZfG5A_mSHpyrAh");
+const $=id=>document.getElementById(id),A=$("app");
+const h=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let me,prof,deck=[],chan,unread=0;
+function toast(t){const d=document.createElement("div");d.className="t";d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),3000)}
+const wrap=(x,tab)=>{A.innerHTML=x+(tab?`<nav>${[["discover","🔥 Discover"],["likes","💜 Likes"],["matches","💬 Matches"],["alerts","🔔 Alerts"+(unread?" ("+unread+")":"")],["profile","👤 Me"]].map(t=>`<button class="${t[0]===tab?"on":""}" onclick="go('${t[0]}')">${t[1]}</button>`).join("")}</nav>`:"")};
+
+/* ---------- auth ---------- */
+function authView(mode="up"){wrap(`<h1>CampusConnect</h1><p class="m">Your Campus. Your People. Your Next Connection. Free for students aged 18+.</p><div class="card">
+${mode==="up"?`<label>Display name</label><input id="dn" maxlength="40">`:""}
+<label>Email</label><input id="em" type="email" autocomplete="email">
+<label>Password (8+ characters, letters and digits)</label><input id="pw" type="password" autocomplete="${mode==="up"?"new":"current"}-password">
+${mode==="up"?`<label>Date of birth</label><input id="db" type="date"><p class="m">You must be 18 or older. This cannot be changed later.</p>`:""}
+<button class="b p" onclick="${mode==="up"?"signUp()":"logIn()"}">${mode==="up"?"Create account":"Log in"}</button>
+<button class="b" onclick="authView('${mode==="up"?"in":"up"}')">${mode==="up"?"I have an account":"Create account"}</button>
+${mode==="in"?`<p><a href="#" onclick="reset();return false">Forgot password?</a></p>`:""}</div>`)}
+async function signUp(){const dob=$("db").value,n=$("dn").value.trim();
+if(n.length<2)return toast("Enter a display name");if(!dob)return toast("Enter your date of birth");
+const b=new Date(dob),t=new Date();let a=t.getFullYear()-b.getFullYear();if(t<new Date(t.getFullYear(),b.getMonth(),b.getDate()))a--;
+if(a<18)return toast("CampusConnect is for adults aged 18 and over.");
+const r=await sb.auth.signUp({email:$("em").value.trim(),password:$("pw").value,options:{data:{date_of_birth:dob,display_name:n}}});
+if(r.error)return toast(r.error.message);
+if(!r.data.session)wrap(`<div class="card"><h2>Check your email</h2><p>We sent a confirmation link. Tap it, then log in.</p><button class="b p" onclick="authView('in')">Go to log in</button></div>`)}
+async function logIn(){const r=await sb.auth.signInWithPassword({email:$("em").value.trim(),password:$("pw").value});if(r.error)toast(r.error.message)}
+async function reset(){const e=$("em").value.trim();if(!e)return toast("Enter your email first");const r=await sb.auth.resetPasswordForEmail(e);toast(r.error?r.error.message:"Reset link sent")}
+
+/* ---------- load / setup ---------- */
+async function load(){const r=await sb.from("profiles").select("*").eq("user_id",me.id).single();
+if(r.error)return wrap(`<div class="card">Could not load your profile: ${h(r.error.message)}<br><button class="b" onclick="sb.auth.signOut()">Sign out</button></div>`);
+prof=r.data;prof.university_id?go("discover"):setup()}
+async function setup(){const [u,i]=await Promise.all([sb.from("universities").select("id,name,type").eq("active",true).order("name"),sb.from("interests").select("*").order("name")]);
+const g=t=>(u.data||[]).filter(x=>x.type===t).map(x=>`<option value="${x.id}" ${x.id===prof.university_id?"selected":""}>${h(x.name)}</option>`).join("");
+wrap(`<h1>Set up your profile</h1><div class="card">
+<label>University</label><select id="su"><option value="">Choose…</option><optgroup label="Federal">${g("federal")}</optgroup><optgroup label="State">${g("state")}</optgroup><optgroup label="Private">${g("private")}</optgroup></select>
+<label>Department</label><input id="sd" value="${h(prof.department)}">
+<label>Year of study</label><input id="sy" type="number" min="1" max="8" value="${prof.study_year||""}">
+<label>I am</label><select id="sg"><option value="">Choose…</option><option value="man">Man</option><option value="woman">Woman</option><option value="nonbinary">Non-binary</option><option value="other">Other</option></select>
+<label>I'm looking for</label><select id="si"><option value="serious">Serious relationship</option><option value="casual">Casual dating</option><option value="friendship">Friendship</option><option value="meeting_people">Meeting new people</option><option value="open" selected>Open to anything</option></select>
+<label>Bio</label><textarea id="sb" rows="3" maxlength="500">${h(prof.biography)}</textarea>
+<label>Interests</label><div>${(i.data||[]).map(x=>`<label class="chip"><input type="checkbox" class="ii" value="${x.id}">${h(x.name)}</label>`).join("")}</div>
+<label>Show me</label><div>${["man","woman","nonbinary","other"].map(x=>`<label class="chip"><input type="checkbox" class="pg" value="${x}" checked>${x}</label>`).join("")}</div>
+<div class="row"><div style="flex:1"><label>Min age</label><input id="a1" type="number" min="18" value="18"></div><div style="flex:1"><label>Max age</label><input id="a2" type="number" min="18" value="30"></div></div>
+<label>Profile photo (JPG, PNG or WebP, up to 5 MB)</label><input id="sf" type="file" accept="image/jpeg,image/png,image/webp">
+<p class="m">Photos are reviewed before others can see them. Never share private contact details.</p>
+<button class="b p" onclick="saveSetup()">Save and continue</button></div>`)}
+async function saveSetup(){const v=id=>$(id).value,all=s=>[...document.querySelectorAll(s+":checked")].map(x=>x.value);
+if(!v("su")||!v("sg"))return toast("Choose your university and gender");
+const a1=+v("a1"),a2=+v("a2");if(a1<18||a2<a1)return toast("Check the age range (minimum 18)");
+let r=await sb.from("profiles").update({university_id:+v("su"),gender:v("sg"),relationship_intention:v("si"),department:v("sd"),study_year:+v("sy")||null,biography:v("sb")}).eq("user_id",me.id);
+if(r.error)return toast(r.error.message);
+const g=all(".pg");await sb.from("preferences").update({minimum_age:a1,maximum_age:a2,preferred_genders:g.length?g:["man","woman","nonbinary","other"]}).eq("user_id",me.id);
+await sb.from("user_interests").delete().eq("user_id",me.id);const ii=all(".ii");
+if(ii.length)await sb.from("user_interests").insert(ii.map(x=>({user_id:me.id,interest_id:+x})));
+const f=$("sf").files[0];
+if(f){if(f.size>5e6||!/^image\/(jpeg|png|webp)$/.test(f.type))return toast("Photo must be JPG, PNG or WebP under 5 MB");
+const c=await sb.from("profile_photos").select("*",{count:"exact",head:true}).eq("user_id",me.id);
+const p=`${me.id}/${Date.now()}.${f.type.split("/")[1]}`,u=await sb.storage.from("profile-photos").upload(p,f);
+if(u.error)return toast(u.error.message);
+await sb.from("profile_photos").insert({user_id:me.id,image_path:p,display_order:c.count||0})}
+load()}
+
+/* ---------- navigation ---------- */
+async function go(v,x){if(chan){sb.removeChannel(chan);chan=null}
+const n=await sb.from("notifications").select("id",{count:"exact",head:true}).eq("user_id",me.id).is("read_at",null);unread=n.count||0;
+({discover,likes,matches,alerts,profileView,chat})[v==="profile"?"profileView":v](x)}
+
+/* ---------- discover ---------- */
+async function photo(uid){const r=await sb.from("profile_photos").select("image_path").eq("user_id",uid).eq("moderation_status","approved").order("display_order").limit(1);
+if(!r.data?.length)return null;const s=await sb.storage.from("profile-photos").createSignedUrl(r.data[0].image_path,3600);return s.data?.signedUrl}
+async function discover(){wrap(`<p class="m">Loading…</p>`,"discover");
+const r=await sb.rpc("discover",{lim:20,off:0,only_verified:false});if(r.error)return wrap(`<div class="card">${h(r.error.message)}</div>`,"discover");
+deck=r.data||[];card()}
+async function card(){const p=deck[0];
+if(!p)return wrap(`<div class="card"><h2>You're all caught up</h2><p class="m">No more eligible profiles right now. Check back soon. Profiles appear after their photo is approved.</p><button class="b" onclick="discover()">Refresh</button></div>`,"discover");
+const u=await photo(p.user_id);
+wrap(`<div class="pc" style="${u?`background-image:url('${u}')`:""}"><div><h2>${h(p.display_name)}, ${p.age} ${p.verified?"✔":""}</h2><span>${h(p.department||"")}</span><p>${h(p.biography||"")}</p><small>${p.shared_interests} shared interests</small></div></div>
+<div class="acts"><button class="b" onclick="act('pass')" aria-label="Pass">✖️</button><button class="b" onclick="act('super')" aria-label="Super like">⭐</button><button class="b" onclick="act('like')" aria-label="Like">❤️</button></div>`,"discover")}
+async function act(k){const p=deck[0];if(!p)return;await likeId(p.user_id,k,p);deck.shift();card()}
+async function likeId(id,k,p){
+if(k==="pass"){await sb.from("passes").insert({sender_id:me.id,receiver_id:id});return}
+const r=await sb.from("likes").insert({sender_id:me.id,receiver_id:id,like_type:k==="super"?"super":"like"});
+if(r.error)return toast(r.error.message);
+const a=[me.id,id].sort(),m=await sb.from("matches").select("id").eq("user_one_id",a[0]).eq("user_two_id",a[1]).eq("status","active");
+if(m.data?.length)toast("💜 It's a Match! Open Matches to chat.")}
+
+/* ---------- likes ---------- */
+async function likes(){wrap(`<p class="m">Loading…</p>`,"likes");
+const [l,my,ps]=await Promise.all([sb.from("likes").select("sender_id").eq("receiver_id",me.id),sb.from("likes").select("receiver_id").eq("sender_id",me.id),sb.from("passes").select("receiver_id").eq("sender_id",me.id)]);
+const skip=new Set([...(my.data||[]).map(x=>x.receiver_id),...(ps.data||[]).map(x=>x.receiver_id)]);
+const ids=(l.data||[]).map(x=>x.sender_id).filter(x=>!skip.has(x));
+const p=ids.length?(await sb.from("profiles").select("user_id,display_name,department").in("user_id",ids)).data||[]:[];
+wrap(`<h1>Likes You</h1>`+(p.map(x=>`<div class="i row"><div style="flex:1"><b>${h(x.display_name)}</b><br><span class="m">${h(x.department||"")}</span></div><button class="b p" onclick="likeId('${x.user_id}','like').then(likes)">Like back</button><button class="b" onclick="likeId('${x.user_id}','pass').then(likes)">✖</button></div>`).join("")||`<p class="m">No new likes yet.</p>`),"likes")}
+
+/* ---------- matches and chat ---------- */
+async function matches(){wrap(`<p class="m">Loading…</p>`,"matches");
+const m=await sb.from("matches").select("id,user_one_id,user_two_id").eq("status","active");
+const oth=(m.data||[]).map(x=>({id:x.id,u:x.user_one_id===me.id?x.user_two_id:x.user_one_id}));
+const p=oth.length?(await sb.from("profiles").select("user_id,display_name").in("user_id",oth.map(x=>x.u))).data||[]:[];
+wrap(`<h1>Matches</h1>`+(oth.map(o=>{const q=p.find(x=>x.user_id===o.u);return q?`<button class="i b" style="width:100%;text-align:left;border-radius:18px" onclick="go('chat',{m:'${o.id}',u:'${o.u}',n:'${h(q.display_name)}'})"><b>${h(q.display_name)}</b><br><span class="m">Tap to chat</span></button>`:""}).join("")||`<p class="m">No matches yet. Keep discovering.</p>`),"matches")}
+async function chat(o){const c=await sb.from("conversations").select("id").eq("match_id",o.m).single();if(c.error)return toast("Chat unavailable");
+const cid=c.data.id;sb.rpc("mark_read",{conv:cid});
+const ms=(await sb.from("messages").select("*").eq("conversation_id",cid).order("created_at")).data||[];
+const line=x=>`<div class="msg ${x.sender_id===me.id?"me":""}" data-id="${x.id}">${h(x.content)}</div>`;
+wrap(`<div class="row"><button class="b" onclick="go('matches')">←</button><b style="flex:1">${h(o.n)}</b><button class="b" onclick="blockU('${o.u}')">Block</button><button class="b" onclick="reportU('${o.u}')">Report</button></div>
+<p class="m">Meet in public places and never share sensitive personal information.</p><div id="ml">${ms.map(line).join("")}</div>
+<div class="row" style="margin-top:10px"><input id="mi" style="flex:1;margin:0" maxlength="2000" placeholder="Message ${h(o.n)}" autocomplete="off"><button class="b p" id="sd">Send</button></div>`);
+$("sd").onclick=async()=>{const t=$("mi").value.trim();if(!t)return;$("mi").value="";const r=await sb.from("messages").insert({conversation_id:cid,sender_id:me.id,content:t});if(r.error){toast(r.error.message);$("mi").value=t}};
+chan=sb.channel("c"+cid).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:`conversation_id=eq.${cid}`},e=>{const x=e.new;if(document.querySelector(`[data-id="${x.id}"]`))return;$("ml").insertAdjacentHTML("beforeend",line(x));scrollTo(0,document.body.scrollHeight);if(x.sender_id!==me.id)sb.rpc("mark_read",{conv:cid})}).subscribe()}
+async function blockU(u){if(!confirm("Block this person? You will be unmatched and they can no longer contact you."))return;const r=await sb.from("blocks").insert({blocker_id:me.id,blocked_user_id:u});toast(r.error?r.error.message:"Blocked");go("matches")}
+async function reportU(u){const c=prompt("Reason: fake_profile, impersonation, harassment, scam, underage, inappropriate_photo, other","harassment");if(!c)return;
+const d=prompt("Details (optional)")||"";const r=await sb.from("reports").insert({reporter_id:me.id,reported_user_id:u,category:c.trim(),description:d});toast(r.error?r.error.message:"Report sent to moderators")}
+
+/* ---------- alerts and profile ---------- */
+async function alerts(){const r=await sb.from("notifications").select("*").eq("user_id",me.id).order("created_at",{ascending:false}).limit(50);
+wrap(`<h1>Alerts</h1><button class="b" onclick="readAll()">Mark all as read</button><div style="height:10px"></div>`+((r.data||[]).map(n=>`<div class="i" style="opacity:${n.read_at?.6:1}">${h(n.content)}<br><span class="m">${new Date(n.created_at).toLocaleString()}</span></div>`).join("")||`<p class="m">No notifications yet.</p>`),"alerts")}
+async function readAll(){await sb.from("notifications").update({read_at:new Date().toISOString()}).eq("user_id",me.id).is("read_at",null);go("alerts")}
+function profileView(){const hid=prof.profile_visibility==="hidden";
+wrap(`<h1>${h(prof.display_name)}</h1><div class="card"><p>${h(prof.biography||"No bio yet.")}</p><p class="m">Verification: ${prof.verification_status}</p></div>
+<div class="row"><button class="b" onclick="setup()">Edit profile</button><button class="b" onclick="vis()">${hid?"Show my profile":"Hide my profile"}</button><button class="b" onclick="sb.auth.signOut()">Sign out</button></div>
+<p class="m">Your date of birth is private and can't be changed.</p>`,"profile")}
+async function vis(){const v=prof.profile_visibility==="hidden"?"everyone":"hidden";const r=await sb.from("profiles").update({profile_visibility:v}).eq("user_id",me.id);if(r.error)return toast(r.error.message);prof.profile_visibility=v;toast(v==="hidden"?"Profile hidden":"Profile visible");profileView()}
+
+/* ---------- start ---------- */
+sb.auth.onAuthStateChange((e,s)=>{if(s?.user){if(me?.id!==s.user.id){me=s.user;setTimeout(load,0)}}else{me=null;authView("up")}});
+</script></body></html>
